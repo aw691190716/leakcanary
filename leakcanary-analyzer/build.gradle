@@ -1,58 +1,19 @@
-version rootProject.ext.VERSION_NAME
-group rootProject.ext.GROUP
+apply plugin: 'java-library'
+apply plugin: 'kotlin'
 
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-}
-
-apply plugin: 'com.android.library'
-
-repositories {
-  mavenCentral()
-}
+sourceCompatibility = JavaVersion.VERSION_1_7
+targetCompatibility = JavaVersion.VERSION_1_7
 
 dependencies {
-  compile 'com.squareup.haha:haha:2.0.2'
-  compile project(':leakcanary-watcher')
-  testCompile 'junit:junit:4.12'
-  testCompile 'org.assertj:assertj-core:1.7.0'
-}
+  api project(':leakcanary-watcher')
+  api project(':leakcanary-haha')
 
-android.libraryVariants.all { variant ->
-  def name = variant.buildType.name
-  if (name.equals(com.android.builder.core.BuilderConstants.DEBUG)) {
-    return; // Skip debug builds.
-  }
-  def task = project.tasks.create "jar${name.capitalize()}", Jar
-  task.dependsOn variant.javaCompile
-  task.from variant.javaCompile.destinationDir
-  artifacts.add('archives', task);
-}
+  implementation deps.androidx.annotation
+  implementation deps.kotlin.stdlib
 
-
-// See: https://code.google.com/p/android/issues/detail?id=64887#c13
-task copyTestResources(type: Copy) {
-  from "${projectDir}/src/test/resources"
-  into "${buildDir}/classes/test"
-}
-
-afterEvaluate { project ->
-  testDebugUnitTest.dependsOn copyTestResources
-}
-
-android {
-  compileSdkVersion rootProject.ext.compileSdkVersion
-  buildToolsVersion rootProject.ext.buildToolsVersion
-  defaultConfig {
-    minSdkVersion rootProject.ext.minSdkVersion
-    targetSdkVersion rootProject.ext.targetSdkVersion
-  }
-}
-
-task sourceJar(type: Jar) {
-  from 'src/main/java'
+  testImplementation deps.assertj_core
+  testImplementation deps.junit
+  testImplementation deps.okio
 }
 
 apply from: rootProject.file('gradle/checkstyle.gradle')

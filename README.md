@@ -1,40 +1,8 @@
-# LeakCanary
+# LeakCanary 🐤
 
-A memory leak detection library for Android and Java.
+A memory leak detection library for Android.
 
-*“A small leak will sink a great ship.”* - Benjamin Franklin
-
-![screenshot.png](assets/screenshot.png)
-
-## Getting started
-
-In your `build.gradle`:
-
-```gradle
- dependencies {
-   debugCompile 'com.squareup.leakcanary:leakcanary-android:1.4-beta2'
-   releaseCompile 'com.squareup.leakcanary:leakcanary-android-no-op:1.4-beta2'
-   testCompile 'com.squareup.leakcanary:leakcanary-android-no-op:1.4-beta2'
- }
-```
-
-In your `Application` class:
-
-```java
-public class ExampleApplication extends Application {
-
-  @Override public void onCreate() {
-    super.onCreate();
-    LeakCanary.install(this);
-  }
-}
-```
-
-**You're good to go!** LeakCanary will automatically show a notification when an activity memory leak is detected in your debug build.
-
-Questions? Check out [the FAQ](https://github.com/square/leakcanary/wiki/FAQ)!
-
-![icon_512.png](assets/icon_512.png)
+### [square.github.io/leakcanary](http://square.github.io/leakcanary)
 
 ## License
 
