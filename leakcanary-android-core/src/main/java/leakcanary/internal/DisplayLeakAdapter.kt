@@ -16,6 +16,7 @@
 package leakcanary.internal
 
 import android.content.Context
+import android.text.Html
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.format.DateUtils
@@ -23,16 +24,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.TextView
-import androidx.annotation.ColorRes
-import androidx.core.content.ContextCompat
-import androidx.core.text.HtmlCompat
 import com.squareup.leakcanary.core.R
-import leakcanary.LeakNodeStatus.LEAKING
-import leakcanary.LeakNodeStatus.NOT_LEAKING
-import leakcanary.LeakNodeStatus.UNKNOWN
-import leakcanary.LeakTrace
-import leakcanary.LeakTraceElement
-import leakcanary.LeakTraceElement.Type.STATIC_FIELD
 import leakcanary.internal.DisplayLeakConnectorView.Type
 import leakcanary.internal.DisplayLeakConnectorView.Type.END
 import leakcanary.internal.DisplayLeakConnectorView.Type.END_FIRST_UNREACHABLE
@@ -45,34 +37,25 @@ import leakcanary.internal.DisplayLeakConnectorView.Type.NODE_UNKNOWN
 import leakcanary.internal.DisplayLeakConnectorView.Type.NODE_UNREACHABLE
 import leakcanary.internal.DisplayLeakConnectorView.Type.START
 import leakcanary.internal.DisplayLeakConnectorView.Type.START_LAST_REACHABLE
-import leakcanary.internal.MoreDetailsView.Details.CLOSED
-import leakcanary.internal.MoreDetailsView.Details.NONE
-import leakcanary.internal.MoreDetailsView.Details.OPENED
 import leakcanary.internal.activity.db.LeakingInstanceTable.InstanceProjection
+import leakcanary.internal.navigation.getColorCompat
 import leakcanary.internal.navigation.inflate
+import shark.LeakNodeStatus.LEAKING
+import shark.LeakNodeStatus.NOT_LEAKING
+import shark.LeakNodeStatus.UNKNOWN
+import shark.LeakTrace
+import shark.LeakTraceElement
+import shark.LeakTraceElement.Type.STATIC_FIELD
 
-internal class DisplayLeakAdapter private constructor(
+@Suppress("DEPRECATION", "TooManyFunctions")
+internal class DisplayLeakAdapter constructor(
   context: Context,
   private val leakTrace: LeakTrace,
-  private val referenceName: String,
-  private val instanceProjections: List<InstanceProjection>
+  private val groupDescription: String = "",
+  private val instanceProjections: List<InstanceProjection> = emptyList()
 ) : BaseAdapter() {
 
   private val isLeakGroup = instanceProjections.isNotEmpty()
-
-  constructor(
-    context: Context,
-    leakTrace: LeakTrace,
-    referenceName: String
-  ) : this(context, leakTrace, referenceName, emptyList())
-
-  constructor(
-    context: Context,
-    leakTrace: LeakTrace,
-    instanceProjections: List<InstanceProjection>
-  ) : this(context, leakTrace, "", instanceProjections)
-
-  private val opened = BooleanArray(TOP_ROW_COUNT + leakTrace.elements.size)
 
   private val classNameColorHexString: String
   private val leakColorHexString: String
@@ -114,7 +97,7 @@ internal class DisplayLeakAdapter private constructor(
 
   private fun bindTopRow(view: View) {
     val textView = view.findViewById<TextView>(R.id.leak_canary_row_text)
-    textView.text = view.context.packageName
+    textView.text = groupDescription
   }
 
   private fun bindConnectorRow(
@@ -122,52 +105,30 @@ internal class DisplayLeakAdapter private constructor(
     position: Int
   ) {
     val titleView = view.findViewById<TextView>(R.id.leak_canary_row_title)
-    val detailView = view.findViewById<TextView>(R.id.leak_canary_row_details)
     val connector = view.findViewById<DisplayLeakConnectorView>(R.id.leak_canary_row_connector)
-    val moreDetailsView = view.findViewById<MoreDetailsView>(R.id.leak_canary_row_more)
 
     connector.setType(getConnectorType(position))
-
-    moreDetailsView.setDetails(
-        when {
-          isLeakGroup -> NONE
-          // Learn more row
-          isFirstConnectorRow(position) -> NONE
-          opened[position] -> OPENED
-          else -> CLOSED
-        }
-    )
-
-    if (opened[position]) {
-      detailView.visibility = View.VISIBLE
-    } else {
-      detailView.visibility = View.GONE
-    }
 
     val resources = view.resources
     if (isFirstConnectorRow(position)) {
       titleView.text = if (isLeakGroup) {
-        HtmlCompat.fromHtml(
+        Html.fromHtml(
             """
               <font color='$helpColorHexString'>
                 <b>Known likely causes of leak group</b>
               </font>
-            """,
-            HtmlCompat.FROM_HTML_MODE_LEGACY
+            """
         )
       } else {
-        HtmlCompat.fromHtml(
+        Html.fromHtml(
             """
               <font color='$helpColorHexString'>
                 <b>${resources.getString(R.string.leak_canary_help_title)}</b>
               </font>
-            """,
-            HtmlCompat.FROM_HTML_MODE_LEGACY
+            """
         )
       }
     } else {
-      val isLast = position == (TOP_ROW_COUNT + leakTrace.elements.size) - 1
-
       val elementIndex = elementIndex(position)
       val element = leakTrace.elements[elementIndex]
 
@@ -178,11 +139,6 @@ internal class DisplayLeakAdapter private constructor(
       val htmlTitle = htmlTitle(element, maybeLeakCause, view.context)
 
       titleView.text = htmlTitle
-
-      if (opened[position]) {
-        val htmlDetail = htmlDetails(isLast, element)
-        detailView.text = htmlDetail
-      }
     }
   }
 
@@ -222,10 +178,10 @@ internal class DisplayLeakAdapter private constructor(
 
     htmlString += "<br>"
 
-    val reachabilityString = when (element.leakStatusAndReason.status) {
+    val reachabilityString = when (element.leakStatus) {
       UNKNOWN -> "UNKNOWN"
-      NOT_LEAKING -> "NO (${element.leakStatusAndReason.reason})"
-      LEAKING -> "YES (${element.leakStatusAndReason.reason})"
+      NOT_LEAKING -> "NO (${element.leakStatusReason})"
+      LEAKING -> "YES (${element.leakStatusReason})"
     }
 
     val indentation = "&nbsp;".repeat(4)
@@ -252,13 +208,7 @@ internal class DisplayLeakAdapter private constructor(
 
       htmlString += "$indentation$styledClassName.${if (maybeLeakCause) "<b>$referenceName</b>" else referenceName}"
     }
-
-    val exclusion = element.exclusion
-    if (exclusion != null) {
-      htmlString += " (excluded)"
-    }
-    val builder =
-      HtmlCompat.fromHtml(htmlString, HtmlCompat.FROM_HTML_MODE_LEGACY) as SpannableStringBuilder
+    val builder = Html.fromHtml(htmlString) as SpannableStringBuilder
     if (maybeLeakCause) {
       SquigglySpan.replaceUnderlineSpans(builder, context)
     }
@@ -266,26 +216,7 @@ internal class DisplayLeakAdapter private constructor(
     return builder
   }
 
-  private fun htmlDetails(
-    isLeakingInstance: Boolean,
-    element: LeakTraceElement
-  ): Spanned {
-    var htmlString = ""
-    val exclusion = element.exclusion
-    if (exclusion != null) {
-      htmlString += "<br/><br/>Excluded by rule"
-      htmlString += " matching <font color='#f3cf83'>" + exclusion.matching + "</font>"
-      if (exclusion.reason != null) {
-        htmlString += " because <font color='#f3cf83'>" + exclusion.reason + "</font>"
-      }
-    }
-    if (isLeakingInstance && referenceName != "") {
-      htmlString += " <font color='$extraColorHexString'>$referenceName</font>"
-    }
-
-    return HtmlCompat.fromHtml(htmlString, HtmlCompat.FROM_HTML_MODE_LEGACY)
-  }
-
+  @Suppress("ReturnCount")
   private fun getConnectorType(position: Int): Type {
     if (isFirstConnectorRow(position)) {
       return if (isLeakGroup) HELP_LEAK_GROUP else HELP
@@ -294,23 +225,23 @@ internal class DisplayLeakAdapter private constructor(
         return START_LAST_REACHABLE
       }
       val nextReachability = leakTrace.elements[elementIndex(position + 1)]
-      return if (nextReachability.leakStatusAndReason.status != NOT_LEAKING) {
+      return if (nextReachability.leakStatus != NOT_LEAKING) {
         START_LAST_REACHABLE
       } else START
     } else {
       val isLeakingInstance = position == count - 1
       if (isLeakingInstance) {
         val previousReachability = leakTrace.elements[elementIndex(position - 1)]
-        return if (previousReachability.leakStatusAndReason.status != LEAKING) {
+        return if (previousReachability.leakStatus != LEAKING) {
           END_FIRST_UNREACHABLE
         } else END
       } else {
         val reachability = leakTrace.elements[elementIndex(position)]
-        when (reachability.leakStatusAndReason.status) {
+        when (reachability.leakStatus) {
           UNKNOWN -> return NODE_UNKNOWN
           NOT_LEAKING -> {
             val nextReachability = leakTrace.elements[elementIndex(position + 1)]
-            return if (nextReachability.leakStatusAndReason.status != NOT_LEAKING) {
+            return if (nextReachability.leakStatus != NOT_LEAKING) {
               NODE_LAST_REACHABLE
             } else {
               NODE_REACHABLE
@@ -318,13 +249,15 @@ internal class DisplayLeakAdapter private constructor(
           }
           LEAKING -> {
             val previousReachability = leakTrace.elements[elementIndex(position - 1)]
-            return if (previousReachability.leakStatusAndReason.status != LEAKING) {
+            return if (previousReachability.leakStatus != LEAKING) {
               NODE_FIRST_UNREACHABLE
             } else {
               NODE_UNREACHABLE
             }
           }
-          else -> throw IllegalStateException("Unknown value: " + reachability.leakStatusAndReason.status)
+          else -> throw IllegalStateException(
+              "Unknown value: " + reachability.leakStatus
+          )
         }
       }
     }
@@ -333,11 +266,6 @@ internal class DisplayLeakAdapter private constructor(
   fun isLearnMoreRow(position: Int) = isFirstConnectorRow(position) && !isLeakGroup
 
   fun isFirstConnectorRow(position: Int) = position == TOP_ROW_COUNT - 1
-
-  fun toggleRow(position: Int) {
-    opened[position] = !opened[position]
-    notifyDataSetChanged()
-  }
 
   override fun getCount() = TOP_ROW_COUNT + leakTrace.elements.size + instanceProjections.size
 
@@ -365,8 +293,11 @@ internal class DisplayLeakAdapter private constructor(
     private const val TOP_ROW_COUNT = 2
 
     // https://stackoverflow.com/a/6540378/703646
-    private fun hexStringColor(context: Context, @ColorRes colorResId: Int): String {
-      return String.format("#%06X", 0xFFFFFF and ContextCompat.getColor(context, colorResId))
+    private fun hexStringColor(
+      context: Context,
+      colorResId: Int
+    ): String {
+      return String.format("#%06X", 0xFFFFFF and context.getColorCompat(colorResId))
     }
   }
 }

@@ -4,6 +4,9 @@ import android.app.Application
 import android.app.Instrumentation
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+import android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+import android.content.pm.PackageManager.DONT_KILL_APP
 import android.content.pm.ShortcutInfo.Builder
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
@@ -12,15 +15,19 @@ import android.os.Build.VERSION_CODES
 import android.os.Handler
 import android.os.HandlerThread
 import com.squareup.leakcanary.core.R
-import leakcanary.CanaryLog
 import leakcanary.GcTrigger
 import leakcanary.LeakCanary
 import leakcanary.LeakCanary.Config
-import leakcanary.LeakSentry
+import leakcanary.AppWatcher
+import leakcanary.OnHeapAnalyzedListener
+import leakcanary.OnObjectRetainedListener
 import leakcanary.internal.activity.LeakActivity
+import shark.SharkLog
+import java.lang.reflect.InvocationHandler
+import java.lang.reflect.Proxy
 import java.util.concurrent.atomic.AtomicReference
 
-internal object InternalLeakCanary : LeakSentryListener {
+internal object InternalLeakCanary : (Application) -> Unit, OnObjectRetainedListener {
 
   private const val DYNAMIC_SHORTCUT_ID = "com.squareup.leakcanary.dynamic_shortcut"
 
@@ -44,11 +51,16 @@ internal object InternalLeakCanary : LeakSentryListener {
 
   val noInstallConfig: Config
     get() = Config(
-        dumpHeap = false, knownReferences = emptySet(), leakTraceInspectors = emptyList()
+        dumpHeap = false,
+        referenceMatchers = emptyList(),
+        objectInspectors = emptyList(),
+        onHeapAnalyzedListener = OnHeapAnalyzedListener {}
     )
 
-  override fun onLeakSentryInstalled(application: Application) {
+  override fun invoke(application: Application) {
     this.application = application
+
+    AppWatcher.objectWatcher.addOnObjectRetainedListener(this)
 
     val heapDumper = AndroidHeapDumper(application, leakDirectoryProvider)
 
@@ -61,7 +73,8 @@ internal object InternalLeakCanary : LeakSentryListener {
     val backgroundHandler = Handler(handlerThread.looper)
 
     heapDumpTrigger = HeapDumpTrigger(
-        application, backgroundHandler, LeakSentry.refWatcher, gcTrigger, heapDumper, configProvider
+        application, backgroundHandler, AppWatcher.objectWatcher, gcTrigger, heapDumper,
+        configProvider
     )
     application.registerVisibilityListener { applicationVisible ->
       this.applicationVisible = applicationVisible
@@ -94,12 +107,13 @@ internal object InternalLeakCanary : LeakSentryListener {
       }
 
       if (runningInInstrumentationTests) {
-        CanaryLog.d("Instrumentation test detected, setting LeakCanary.Config.dumpHeap to false")
+        SharkLog.d { "Instrumentation test detected, setting LeakCanary.Config.dumpHeap to false" }
         LeakCanary.config = LeakCanary.config.copy(dumpHeap = false)
       }
     }
   }
 
+  @Suppress("ReturnCount")
   private fun addDynamicShortcut(application: Application) {
     if (VERSION.SDK_INT < VERSION_CODES.N_MR1) {
       return
@@ -144,16 +158,10 @@ internal object InternalLeakCanary : LeakSentryListener {
       longLabel = leakActivityLabel
       shortLabel = leakActivityLabel
     } else {
-
       val firstLauncherActivityLabel = if (firstMainActivity.labelRes != 0) {
         application.getString(firstMainActivity.labelRes)
       } else {
-        val applicationInfo = application.applicationInfo
-        if (applicationInfo.labelRes != 0) {
-          application.getString(applicationInfo.labelRes)
-        } else {
-          applicationInfo.nonLocalizedLabel.toString()
-        }
+        application.packageManager.getApplicationLabel(application.applicationInfo)
       }
       val fullLengthLabel = "$firstLauncherActivityLabel $leakActivityLabel"
       // short label should be under 10 and long label under 25
@@ -196,18 +204,17 @@ internal object InternalLeakCanary : LeakSentryListener {
     try {
       shortcutManager.addDynamicShortcuts(listOf(shortcut))
     } catch (ignored: Throwable) {
-      CanaryLog.d(
-          ignored,
-          "Could not add dynamic shortcut. " +
-              "shortcutCount=$shortcutCount, " +
-              "maxShortcutCountPerActivity=${shortcutManager.maxShortcutCountPerActivity}"
-      )
+      SharkLog.d(ignored) {
+        "Could not add dynamic shortcut. " +
+            "shortcutCount=$shortcutCount, " +
+            "maxShortcutCountPerActivity=${shortcutManager.maxShortcutCountPerActivity}"
+      }
     }
   }
 
-  override fun onReferenceRetained() {
+  override fun onObjectRetained() {
     if (this::heapDumpTrigger.isInitialized) {
-      heapDumpTrigger.onReferenceRetained()
+      heapDumpTrigger.onObjectRetained()
     }
   }
 
@@ -215,6 +222,27 @@ internal object InternalLeakCanary : LeakSentryListener {
     if (this::heapDumpTrigger.isInitialized) {
       heapDumpTrigger.onDumpHeapReceived()
     }
+  }
+
+  fun setEnabledBlocking(
+    componentClassName: String,
+    enabled: Boolean
+  ) {
+    val component = ComponentName(application, componentClassName)
+    val newState =
+      if (enabled) COMPONENT_ENABLED_STATE_ENABLED else COMPONENT_ENABLED_STATE_DISABLED
+    // Blocks on IPC.
+    application.packageManager.setComponentEnabledSetting(component, newState, DONT_KILL_APP)
+  }
+
+  inline fun <reified T : Any> noOpDelegate(): T {
+    val javaClass = T::class.java
+    val noOpHandler = InvocationHandler { _, _, _ ->
+      // no op
+    }
+    return Proxy.newProxyInstance(
+        javaClass.classLoader, arrayOf(javaClass), noOpHandler
+    ) as T
   }
 
   private const val LEAK_CANARY_THREAD_NAME = "LeakCanary-Heap-Dump"

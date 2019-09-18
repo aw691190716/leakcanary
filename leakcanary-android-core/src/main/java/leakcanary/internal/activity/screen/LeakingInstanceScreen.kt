@@ -6,7 +6,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ListView
 import com.squareup.leakcanary.core.R
-import leakcanary.LeakingInstance
 import leakcanary.internal.DisplayLeakAdapter
 import leakcanary.internal.activity.db.LeakingInstanceTable
 import leakcanary.internal.activity.db.executeOnDb
@@ -19,6 +18,8 @@ import leakcanary.internal.navigation.activity
 import leakcanary.internal.navigation.goTo
 import leakcanary.internal.navigation.inflate
 import leakcanary.internal.navigation.onCreateOptionsMenu
+import shark.Leak
+import shark.LibraryLeak
 import java.io.Serializable
 
 internal class LeakingInstanceScreen private constructor(
@@ -30,7 +31,7 @@ internal class LeakingInstanceScreen private constructor(
   sealed class InstanceOrId : Serializable {
     class Instance(
       val heapAnalysisId: Long,
-      val instance: LeakingInstance
+      val instance: Leak
     ) : InstanceOrId()
 
     class Id(val id: Long) : InstanceOrId()
@@ -62,24 +63,22 @@ internal class LeakingInstanceScreen private constructor(
 
   private fun View.onInstanceRetrieved(
     heapAnalysisId: Long,
-    leakingInstance: LeakingInstance
+    leak: Leak
   ) {
-    val classSimpleName = leakingInstance.instanceClassSimpleName
+    val classSimpleName = leak.classSimpleName
     activity.title =
       resources.getString(R.string.leak_canary_class_has_leaked, classSimpleName)
 
     val listView = findViewById<ListView>(R.id.leak_canary_list)
 
-    val adapter =
-      DisplayLeakAdapter(context, leakingInstance.leakTrace, leakingInstance.referenceName)
+    val groupDescription = if (leak is LibraryLeak) "Library Leak: " +leak.pattern.toString() else ""
+    val adapter = DisplayLeakAdapter(context, leak.leakTrace, groupDescription)
     listView.adapter = adapter
 
     listView.setOnItemClickListener { _, _, position, _ ->
       if (adapter.isLearnMoreRow(position)) {
         val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(LEARN_MORE_URL))
         activity.startActivity(browserIntent)
-      } else {
-        adapter.toggleRow(position)
       }
     }
 
@@ -92,13 +91,13 @@ internal class LeakingInstanceScreen private constructor(
       menu.add(R.string.leak_canary_share_leak)
           .setOnMenuItemClickListener {
             // TODO Add version information
-            share(leakingInstance.toString())
+            share(leak.toString())
             true
           }
       menu.add(R.string.leak_canary_stackoverflow_share)
           .setOnMenuItemClickListener {
             // TODO Add version information
-            shareToStackOverflow(leakingInstance.toString())
+            shareToStackOverflow(leak.toString())
             true
           }
     }

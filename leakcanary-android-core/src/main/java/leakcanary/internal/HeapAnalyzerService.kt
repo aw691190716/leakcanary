@@ -17,14 +17,14 @@ package leakcanary.internal
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build.VERSION.SDK_INT
 import android.os.Process
-import androidx.core.content.ContextCompat
 import com.squareup.leakcanary.core.R
-import leakcanary.AnalyzerProgressListener
-import leakcanary.AndroidKnownReference
-import leakcanary.CanaryLog
-import leakcanary.HeapAnalyzer
 import leakcanary.LeakCanary
+import shark.OnAnalysisProgressListener
+import shark.HeapAnalyzer
+import shark.ObjectInspectors
+import shark.SharkLog
 import java.io.File
 
 /**
@@ -34,11 +34,11 @@ internal class HeapAnalyzerService : ForegroundService(
     HeapAnalyzerService::class.java.simpleName,
     R.string.leak_canary_notification_analysing,
     R.id.leak_canary_notification_analyzing_heap
-), AnalyzerProgressListener {
+), OnAnalysisProgressListener {
 
   override fun onHandleIntentInForeground(intent: Intent?) {
     if (intent == null) {
-      CanaryLog.d("HeapAnalyzerService received a null intent, ignoring.")
+      SharkLog.d { "HeapAnalyzerService received a null intent, ignoring." }
       return
     }
     // Since we're running in the main process we should be careful not to impact it.
@@ -56,19 +56,21 @@ internal class HeapAnalyzerService : ForegroundService(
     val heapAnalyzer = HeapAnalyzer(this)
     val config = LeakCanary.config
 
-    val exclusions = AndroidKnownReference.mapToExclusions(config.knownReferences)
 
     val heapAnalysis =
-      heapAnalyzer.checkForLeaks(
-          heapDumpFile, exclusions, config.computeRetainedHeapSize, config.leakTraceInspectors
+      heapAnalyzer.analyze(
+          heapDumpFile, config.referenceMatchers, config.computeRetainedHeapSize, config.objectInspectors,
+          if (config.useExperimentalLeakFinders) config.objectInspectors else listOf(
+              ObjectInspectors.KEYED_WEAK_REFERENCE
+          )
       )
 
-    config.analysisResultListener(application, heapAnalysis)
+    config.onHeapAnalyzedListener.onHeapAnalyzed(heapAnalysis)
   }
 
-  override fun onProgressUpdate(step: AnalyzerProgressListener.Step) {
-    val percent = (100f * step.ordinal / AnalyzerProgressListener.Step.values().size).toInt()
-    CanaryLog.d("Analysis in progress, working on: %s", step.name)
+  override fun onAnalysisProgress(step: OnAnalysisProgressListener.Step) {
+    val percent = (100f * step.ordinal / shark.OnAnalysisProgressListener.Step.values().size).toInt()
+    SharkLog.d { "Analysis in progress, working on: ${step.name}" }
     val lowercase = step.name.replace("_", " ")
         .toLowerCase()
     val message = lowercase.substring(0, 1).toUpperCase() + lowercase.substring(1)
@@ -84,7 +86,19 @@ internal class HeapAnalyzerService : ForegroundService(
     ) {
       val intent = Intent(context, HeapAnalyzerService::class.java)
       intent.putExtra(HEAPDUMP_FILE_EXTRA, heapDumpFile)
-      ContextCompat.startForegroundService(context, intent)
+      startForegroundService(context, intent)
+    }
+
+    fun startForegroundService(
+      context: Context,
+      intent: Intent
+    ) {
+      if (SDK_INT >= 26) {
+        context.startForegroundService(intent)
+      } else {
+        // Pre-O behavior.
+        context.startService(intent)
+      }
     }
   }
 }

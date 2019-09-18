@@ -4,16 +4,15 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.os.AsyncTask
-import leakcanary.CanaryLog
-import leakcanary.HeapAnalysis
-import leakcanary.HeapAnalysisFailure
-import leakcanary.HeapAnalysisSuccess
-import leakcanary.Serializables
 import leakcanary.internal.InternalLeakCanary
 import leakcanary.internal.LeakDirectoryProvider
-import leakcanary.leakingInstances
-import leakcanary.toByteArray
+import leakcanary.internal.Serializables
+import leakcanary.internal.toByteArray
 import org.intellij.lang.annotations.Language
+import shark.HeapAnalysis
+import shark.HeapAnalysisFailure
+import shark.HeapAnalysisSuccess
+import shark.SharkLog
 import java.io.File
 
 internal object HeapAnalysisTable {
@@ -40,7 +39,7 @@ internal object HeapAnalysisTable {
     values.put("object", heapAnalysis.toByteArray())
     when (heapAnalysis) {
       is HeapAnalysisSuccess -> {
-        values.put("retained_instance_count", heapAnalysis.retainedInstances.size)
+        values.put("retained_instance_count", heapAnalysis.allLeaks.size)
       }
       is HeapAnalysisFailure -> {
         val cause = heapAnalysis.exception.cause!!
@@ -51,12 +50,14 @@ internal object HeapAnalysisTable {
 
     return db.inTransaction {
       val heapAnalysisId = db.insertOrThrow("heap_analysis", null, values)
-      heapAnalysis.leakingInstances()
-          .forEach { leakingInstance ->
-            LeakingInstanceTable.insert(
-                db, heapAnalysisId, leakingInstance
-            )
-          }
+      if (heapAnalysis is HeapAnalysisSuccess) {
+        heapAnalysis.allLeaks
+            .forEach { leakingInstance ->
+              LeakingInstanceTable.insert(
+                  db, heapAnalysisId, leakingInstance
+              )
+            }
+      }
       heapAnalysisId
     }
   }
@@ -126,7 +127,7 @@ internal object HeapAnalysisTable {
         if (heapDumpDeleted) {
           LeakDirectoryProvider.filesDeletedRemoveLeak += path
         } else {
-          CanaryLog.d("Could not delete heap dump file %s", heapDumpFile.path)
+          SharkLog.d { "Could not delete heap dump file ${heapDumpFile.path}" }
         }
       }
     }

@@ -9,8 +9,8 @@ import android.net.Uri
 import android.os.AsyncTask
 import android.view.View
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import com.squareup.leakcanary.core.R
+import leakcanary.internal.LeakCanaryFileProvider
 import leakcanary.internal.navigation.activity
 import java.io.File
 
@@ -27,7 +27,7 @@ internal fun View.share(content: String) {
 internal fun View.shareHeapDump(heapDumpFile: File) {
   AsyncTask.SERIAL_EXECUTOR.execute {
     heapDumpFile.setReadable(true, false)
-    val heapDumpUri = FileProvider.getUriForFile(
+    val heapDumpUri = LeakCanaryFileProvider.getUriForFile(
         activity,
         "com.squareup.leakcanary.fileprovider." + activity.packageName,
         heapDumpFile
@@ -50,10 +50,10 @@ internal fun View.shareToStackOverflow(content: String) {
   // AsyncTask was needed here due to setPrimaryClip making a disk write which
   // violated StrictMode if on the main thread
   AsyncTask.execute {
-    clipboard.primaryClip = ClipData.newPlainText(
+    clipboard.setPrimaryClip(ClipData.newPlainText(
         context.getString(R.string.leak_canary_leak_clipdata_label),
         "```\n$content```"
-    )
+    ))
   }
   Toast.makeText(context, R.string.leak_canary_leak_copied, Toast.LENGTH_LONG)
       .show()

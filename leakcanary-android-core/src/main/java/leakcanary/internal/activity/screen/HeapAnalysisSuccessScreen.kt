@@ -6,11 +6,6 @@ import android.view.ViewGroup
 import android.widget.ListView
 import android.widget.TextView
 import com.squareup.leakcanary.core.R
-import leakcanary.Exclusion.Status.WEAKLY_REACHABLE
-import leakcanary.Exclusion.Status.WONT_FIX_LEAK
-import leakcanary.HeapAnalysisSuccess
-import leakcanary.LeakingInstance
-import leakcanary.NoPathToInstance
 import leakcanary.internal.activity.db.HeapAnalysisTable
 import leakcanary.internal.activity.db.LeakingInstanceTable
 import leakcanary.internal.activity.db.LeakingInstanceTable.HeapAnalysisGroupProjection
@@ -23,6 +18,7 @@ import leakcanary.internal.navigation.goBack
 import leakcanary.internal.navigation.goTo
 import leakcanary.internal.navigation.inflate
 import leakcanary.internal.navigation.onCreateOptionsMenu
+import shark.HeapAnalysisSuccess
 
 internal class HeapAnalysisSuccessScreen(
   private val analysisId: Long
@@ -54,7 +50,7 @@ internal class HeapAnalysisSuccessScreen(
   ) {
     activity.title = resources.getString(
         R.string.leak_canary_heap_analysis_success_screen_title,
-        heapAnalysis.retainedInstances.size
+        heapAnalysis.allLeaks.size
     )
 
     onCreateOptionsMenu { menu ->
@@ -79,26 +75,23 @@ internal class HeapAnalysisSuccessScreen(
               goTo(RenderHeapDumpScreen(heapAnalysis.heapDumpFile))
               true
             }
+        menu.add(R.string.leak_canary_options_menu_explore_heap_dump)
+            .setOnMenuItemClickListener {
+              goTo(HprofExplorerScreen(heapAnalysis.heapDumpFile))
+              true
+            }
       }
     }
 
     val listView = findViewById<ListView>(R.id.leak_canary_list)
 
-    val retainedInstances = heapAnalysis.retainedInstances
+    val retainedInstances = heapAnalysis.allLeaks
 
-    var noPathToInstanceCount = 0
     retainedInstances.forEach { retainedInstance ->
-      when (retainedInstance) {
-        is LeakingInstance -> {
-          if (leakGroupByHash[retainedInstance.groupHash] == null) {
-            throw IllegalStateException(
-                "Removing groups is not supported, this should never happen."
-            )
-          }
-        }
-        is NoPathToInstance -> {
-          noPathToInstanceCount++
-        }
+      if (leakGroupByHash[retainedInstance.groupHash] == null) {
+        throw IllegalStateException(
+            "Removing groups is not supported, this should never happen."
+        )
       }
     }
 
@@ -107,19 +100,9 @@ internal class HeapAnalysisSuccessScreen(
     val leakGroups = leakGroupByHash.values.toList()
 
     rowList.addAll(leakGroups.map { projection ->
-      val description = when (projection.exclusionStatus) {
-        WONT_FIX_LEAK -> {
-          "[Won't Fix] ${projection.description}"
-        }
-        WEAKLY_REACHABLE -> {
-          "[Weakly Reachable] ${projection.description}"
-        }
-        else -> {
-          projection.description
-        }
-      }
+      val description = projection.description
 
-      val titleText = if (projection.isNew && projection.exclusionStatus == null) {
+      val titleText = if (projection.isNew && !projection.isLibraryLeak) {
         resources.getString(
             R.string.leak_canary_heap_analysis_success_screen_row_title_new, projection.leakCount,
             description
@@ -139,15 +122,6 @@ internal class HeapAnalysisSuccessScreen(
       )
       titleText to timeText
     })
-
-    if (noPathToInstanceCount > 0) {
-      rowList.add(
-          resources.getString(
-              R.string.leak_canary_heap_analysis_success_screen_no_path_to_instance_count,
-              noPathToInstanceCount
-          ) to ""
-      )
-    }
 
     listView.adapter =
       SimpleListAdapter(R.layout.leak_canary_leak_row, rowList) { view, position ->

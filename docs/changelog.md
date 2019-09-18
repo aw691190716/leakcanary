@@ -1,8 +1,61 @@
 # Change Log
 
-## Version 2.0 Alpha 3 (2019-07-04)
+## Version 2.0 Beta 3 (2019-08-22)
 
-**Thanks for testing the alpha**, we're counting on you to help us find bugs and suggest improvements! Check out the new [Getting Started](https://square.github.io/leakcanary/getting_started) instructions and the [migration guide](https://square.github.io/leakcanary/upgrading-to-leakcanary-2.0/). 
+LeakCanary 2 is in **beta**: the internals and APIs are mostly stable.
+
+Now is a great time to adopt it and provide feedback before the stable release. We're counting on you to find bugs and suggest improvements! Check out the new [Getting Started](https://square.github.io/leakcanary/getting_started) instructions and the [migration guide](https://square.github.io/leakcanary/upgrading-to-leakcanary-2.0/). 
+
+* Baseline memory usage for large hprofs divided by 3 and removed memory spikes [#1543](https://github.com/square/leakcanary/pull/1543)
+* Fixed crash when LeakCanary is initialized from another process [#1529](https://github.com/square/leakcanary/issues/1529)
+* Java local references are deprioritized to look for longer alternative paths [#1525](https://github.com/square/leakcanary/pull/1525)
+* Fixed `JavaLocalPattern` not matching on Lollipop [#1524](https://github.com/square/leakcanary/pull/1524)
+
+Many thanks to
+[@Armaxis](https://github.com/Armaxis),
+[@elihart](https://github.com/elihart),
+[@emartynov](https://github.com/emartynov),
+[@hmcgreevy-instil](https://github.com/hmcgreevy-instil),
+[@pyricau](https://github.com/pyricau)
+for the contributions, bug reports and feature requests.
+
+For more details, see the [2.0-beta-3 Milestone](https://github.com/square/leakcanary/milestone/11) and the [full diff](https://github.com/square/leakcanary/compare/v2.0-beta-2...v2.0-beta-3).
+
+## Version 2.0 Beta 2 (2019-08-02)
+
+* Fixed *Leak analysis failed: Object id not found in heap dump.* [#1516](https://github.com/square/leakcanary/issues/1516)
+* 10x speed increase of hprof indexing on large heap dumps [#1520](https://github.com/square/leakcanary/pull/1520)
+
+Many thanks to
+[@kolphi](https://github.com/kolphi),
+[@pyricau](https://github.com/pyricau),
+[@ZacSweers](https://github.com/ZacSweers)
+for the contributions, bug reports and feature requests.
+
+For more details, see the [2.0-beta-2 Milestone](https://github.com/square/leakcanary/milestone/10) and the [full diff](https://github.com/square/leakcanary/compare/v2.0-beta-1...v2.0-beta-2).
+
+## Version 2.0 Beta 1 (2019-07-30)
+
+* New standalone library! [Shark](shark.md) is the heap analyzer that powers LeakCanary 2, and it can run in any Java VM. It comes with a [CLI](shark.md#shark-cli): you can now run `shark-cli analyze-process com.example.myapp` from your computer.
+* New Heap Explorer directly on device! Open a Heap Analysis in LeakCanary, tap the options menu and select "Heap Explorer". This is still experimental and not very user friendly, contributions welcome!
+* **Large API rewrite** to improve usability. If you used the alpha with a customized configuration, there are breaking changes. Of note: LeakSentry became [AppWatcher](/leakcanary/api/leakcanary-object-watcher-android/leakcanary/-app-watcher/), RefWatcher became [ObjectWatcher](/leakcanary/api/leakcanary-object-watcher/leakcanary/-object-watcher/), AndroidExcludedRefs became [AndroidReferenceMatchers](/leakcanary/api/shark-android/shark/-android-reference-matchers/), AnalysisResultListener became [OnHeapAnalyzedListener](/leakcanary/api/leakcanary-android-core/leakcanary/-on-heap-analyzed-listener/), AndroidLeakTraceInspectors became [AndroidObjectInspectors](/leakcanary/api/shark-android/shark/-android-object-inspectors/).
+* The entire API surface is now documented and the documentation is available on this website: see the **LeakCanary API** tab at the top.
+* Removed the **dependency on Android X**. No more configuration issues! [#1462](https://github.com/square/leakcanary/issues/1462) 
+* Added **Proguard rules** for LeakCanary and ObjectWatcher. [#1500](https://github.com/square/leakcanary/pull/1500) 
+* Display LeakCanary version in the About screen. [#1448](https://github.com/square/leakcanary/issues/1448) 
+* Bug fixes, new reference matchers and object inspectors
+
+Many thanks to
+[@arctouch-carlosottoboni](https://github.com/arctouch-carlosottoboni),
+[@jemaystermind](https://github.com/jemaystermind),
+[@kushagrakumar27](https://github.com/kushagrakumar27),
+[@pyricau](https://github.com/pyricau),
+[@snkashis](https://github.com/snkashis)
+for the contributions, bug reports and feature requests.
+
+For more details, see the [2.0-beta-1 Milestone](https://github.com/square/leakcanary/milestone/9) and the [full diff](https://github.com/square/leakcanary/compare/v2.0-alpha-3...v2.0-beta-1).
+
+## Version 2.0 Alpha 3 (2019-07-04)
 
 * [#1401](https://github.com/square/leakcanary/pull/1401) LeakCanary can now import all hprof files created from prior LeakCanary versions.
 * [#1414](https://github.com/square/leakcanary/pull/1414) New API: `RefWatcher.retainedInstances` which returns the instances that are currently considered retained.
@@ -58,7 +111,7 @@ For more details, see the [2.0-alpha-2 Milestone](https://github.com/square/leak
 
 ## Version 2.0 Alpha 1 (2019-04-23)
 
-<img src="https://github.com/square/leakcanary/wiki/assets/logo-2.0-200px.png" />
+![logo](images/logo-2.0-200px.png)
 
 * New [logo](https://github.com/square/leakcanary/wiki/FAQ#who-made-the-logo), thanks [@flickator](https://github.com/flickator)!
 * Entirely rewritten to **100% Kotlin**

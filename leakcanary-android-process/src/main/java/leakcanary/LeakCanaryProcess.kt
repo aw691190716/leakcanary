@@ -7,7 +7,16 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import shark.SharkLog
 
+/**
+ * Used to determine whether the current process is the LeakCanary analyzer process. By depending
+ * on the `leakcanary-android-process` artifact instead of the `leakcanary-android`, LeakCanary
+ * will automatically run its analysis in a separate process.
+ *
+ * As such, you'll need to be careful to do any custom configuration of LeakCanary in both the main
+ * process and the analyzer process.
+ */
 object LeakCanaryProcess {
 
   @Volatile private var isInAnalyzerProcess: Boolean? = null
@@ -35,6 +44,7 @@ object LeakCanaryProcess {
     return isInAnalyzerProcess
   }
 
+  @Suppress("ReturnCount")
   private fun isInServiceProcess(
     context: Context,
     serviceClass: Class<out Service>
@@ -44,7 +54,7 @@ object LeakCanaryProcess {
     try {
       packageInfo = packageManager.getPackageInfo(context.packageName, PackageManager.GET_SERVICES)
     } catch (e: Exception) {
-      CanaryLog.d(e, "Could not get package info for %s", context.packageName)
+      SharkLog.d(e) { "Could not get package info for ${context.packageName}" }
       return false
     }
 
@@ -61,12 +71,10 @@ object LeakCanaryProcess {
     }
 
     if (serviceInfo.processName == null) {
-      CanaryLog.d("Did not expect service %s to have a null process name", serviceClass)
+      SharkLog.d { "Did not expect service $serviceClass to have a null process name" }
       return false
     } else if (serviceInfo.processName == mainProcess) {
-      CanaryLog.d(
-          "Did not expect service %s to run in main process %s", serviceClass, mainProcess
-      )
+      SharkLog.d { "Did not expect service $serviceClass to run in main process $mainProcess" }
       // Technically we are in the service process, but we're not in the service dedicated process.
       return false
     }
@@ -79,7 +87,7 @@ object LeakCanaryProcess {
       runningProcesses = activityManager.runningAppProcesses
     } catch (exception: SecurityException) {
       // https://github.com/square/leakcanary/issues/948
-      CanaryLog.d("Could not get running app processes %d", exception)
+      SharkLog.d { "Could not get running app processes $exception" }
       return false
     }
 
@@ -92,7 +100,7 @@ object LeakCanaryProcess {
       }
     }
     if (myProcess == null) {
-      CanaryLog.d("Could not find running process for %d", myPid)
+      SharkLog.d { "Could not find running process for $myPid" }
       return false
     }
 

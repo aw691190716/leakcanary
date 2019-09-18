@@ -36,6 +36,7 @@ internal object Notifications {
     !InternalLeakCanary.application.packageManager.isInstantApp
   } else true
 
+  @Suppress("LongParameterList")
   fun showNotification(
     context: Context,
     contentTitle: CharSequence,
@@ -83,6 +84,7 @@ internal object Notifications {
     }
 
     return if (SDK_INT < JELLY_BEAN) {
+      @Suppress("DEPRECATION")
       builder.notification
     } else {
       builder.build()

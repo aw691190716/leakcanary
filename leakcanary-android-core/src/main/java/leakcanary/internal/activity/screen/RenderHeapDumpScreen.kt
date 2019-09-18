@@ -11,15 +11,15 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver.OnGlobalLayoutListener
 import android.widget.ImageView
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import com.squareup.leakcanary.core.R
-import leakcanary.CanaryLog
 import leakcanary.internal.InternalLeakCanary
+import leakcanary.internal.LeakCanaryFileProvider
 import leakcanary.internal.activity.db.executeOnIo
 import leakcanary.internal.navigation.Screen
 import leakcanary.internal.navigation.activity
 import leakcanary.internal.navigation.inflate
 import leakcanary.internal.navigation.onCreateOptionsMenu
+import shark.SharkLog
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -85,15 +85,15 @@ internal class RenderHeapDumpScreen(
                     .show()
                 executeOnIo {
                   val bitmap = HeapDumpRenderer.render(context, heapDumpFile, 2048, 0, 4)
-                  val storageDir =
+                  @Suppress("DEPRECATION") val storageDir =
                     Environment.getExternalStoragePublicDirectory(DIRECTORY_DOWNLOADS)
 
                   val imageFile = File(storageDir, "${heapDumpFile.name}.png")
                   val saved = savePng(imageFile, bitmap)
                   if (saved) {
-                    CanaryLog.d("Png saved at $imageFile")
+                    SharkLog.d { "Png saved at $imageFile" }
                     imageFile.setReadable(true, false)
-                    val imageUri = FileProvider.getUriForFile(
+                    val imageUri = LeakCanaryFileProvider.getUriForFile(
                         activity,
                         "com.squareup.leakcanary.fileprovider." + activity.packageName,
                         imageFile

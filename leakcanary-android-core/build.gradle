@@ -2,11 +2,10 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 dependencies {
-  api project(':leakcanary-analyzer')
-  api project(':leakcanary-leaksentry')
+  api project(':shark-android')
+  api project(':leakcanary-object-watcher-android')
+  api project(':leakcanary-object-watcher-android-androidx')
 
-  implementation deps.androidx.annotation
-  implementation deps.androidx.core
   implementation deps.kotlin.stdlib
 
   testImplementation deps.junit
@@ -34,5 +33,4 @@ android {
   }
 }
 
-apply from: rootProject.file('gradle/checkstyle.gradle')
 apply from: rootProject.file('gradle/gradle-mvn-push.gradle')

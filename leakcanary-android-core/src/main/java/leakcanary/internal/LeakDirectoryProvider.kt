@@ -24,8 +24,8 @@ import android.os.Build.VERSION_CODES.M
 import android.os.Environment
 import android.os.Environment.DIRECTORY_DOWNLOADS
 import com.squareup.leakcanary.core.R
-import leakcanary.CanaryLog
 import leakcanary.internal.NotificationType.LEAKCANARY_LOW
+import shark.SharkLog
 import java.io.File
 import java.io.FilenameFilter
 import java.text.SimpleDateFormat
@@ -56,12 +56,12 @@ internal class LeakDirectoryProvider constructor(
 
     val externalFiles = externalStorageDirectory().listFiles(filter)
     if (externalFiles != null) {
-      files.addAll(Arrays.asList(*externalFiles))
+      files.addAll(externalFiles)
     }
 
     val appFiles = appStorageDirectory().listFiles(filter)
     if (appFiles != null) {
-      files.addAll(Arrays.asList(*appFiles))
+      files.addAll(appFiles)
     }
     return files
   }
@@ -73,29 +73,27 @@ internal class LeakDirectoryProvider constructor(
     if (!directoryWritableAfterMkdirs(storageDirectory)) {
       if (!hasStoragePermission()) {
         if (requestExternalStoragePermission()) {
-          CanaryLog.d("WRITE_EXTERNAL_STORAGE permission not granted, requesting")
+          SharkLog.d { "WRITE_EXTERNAL_STORAGE permission not granted, requesting" }
           requestWritePermissionNotification()
         } else {
-          CanaryLog.d("WRITE_EXTERNAL_STORAGE permission not granted, ignoring")
+          SharkLog.d { "WRITE_EXTERNAL_STORAGE permission not granted, ignoring" }
         }
       } else {
         val state = Environment.getExternalStorageState()
         if (Environment.MEDIA_MOUNTED != state) {
-          CanaryLog.d("External storage not mounted, state: %s", state)
+          SharkLog.d { "External storage not mounted, state: $state" }
         } else {
-          CanaryLog.d(
-              "Could not create heap dump directory in external storage: [%s]",
-              storageDirectory.absolutePath
-          )
+          SharkLog.d {
+              "Could not create heap dump directory in external storage: [${storageDirectory.absolutePath}]"
+          }
         }
       }
       // Fallback to app storage.
       storageDirectory = appStorageDirectory()
       if (!directoryWritableAfterMkdirs(storageDirectory)) {
-        CanaryLog.d(
-            "Could not create heap dump directory in app storage: [%s]",
-            storageDirectory.absolutePath
-        )
+        SharkLog.d {
+            "Could not create heap dump directory in app storage: [${storageDirectory.absolutePath}]"
+        }
         return null
       }
     }
@@ -116,7 +114,7 @@ internal class LeakDirectoryProvider constructor(
         filesDeletedClearDirectory += path
       }
       if (!deleted) {
-        CanaryLog.d("Could not delete file %s", file.path)
+        SharkLog.d { "Could not delete file ${file.path}" }
       }
     }
   }
@@ -154,6 +152,7 @@ internal class LeakDirectoryProvider constructor(
     )
   }
 
+  @Suppress("DEPRECATION")
   private fun externalStorageDirectory(): File {
     val downloadsDirectory = Environment.getExternalStoragePublicDirectory(DIRECTORY_DOWNLOADS)
     return File(downloadsDirectory, "leakcanary-" + context.packageName)
@@ -182,7 +181,7 @@ internal class LeakDirectoryProvider constructor(
 
     val filesToRemove = hprofFiles.size - maxStoredHeapDumps
     if (filesToRemove > 0) {
-      CanaryLog.d("Removing %d heap dumps", filesToRemove)
+      SharkLog.d { "Removing $filesToRemove heap dumps" }
       // Sort with oldest modified first.
       hprofFiles.sortWith(Comparator { lhs, rhs ->
         java.lang.Long.valueOf(lhs.lastModified())
@@ -194,7 +193,7 @@ internal class LeakDirectoryProvider constructor(
         if (deleted) {
           filesDeletedTooOld += path
         } else {
-          CanaryLog.d("Could not delete old hprof file %s", hprofFiles[i].path)
+          SharkLog.d { "Could not delete old hprof file ${hprofFiles[i].path}" }
         }
       }
     }
